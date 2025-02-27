@@ -10,6 +10,7 @@ from .core.trainer import ParallelTrainer
 from .parallel.parallel_ops import ParallelOperations
 from .utils.gradient_utils import GradientManager
 from .utils.checkpoint_utils import CheckpointManager
+from .utils.performance_utils import PerformanceMonitor, Timer, measure_allreduce_bandwidth
 
 __version__ = "0.1.0"
 __all__ = [
@@ -17,5 +18,8 @@ __all__ = [
     "ParallelTrainer", 
     "ParallelOperations", 
     "GradientManager",
-    "CheckpointManager"
+    "CheckpointManager",
+    "PerformanceMonitor",
+    "Timer",
+    "measure_allreduce_bandwidth"
 ]
