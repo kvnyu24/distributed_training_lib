@@ -27,4 +27,7 @@ mpirun -n $NUM_PROCESSES python tests/test_checkpoint_utils.py
 echo -e "\n===== Performance Monitoring Tests ====="
 mpirun -n $NUM_PROCESSES python tests/test_performance_utils.py
 
+echo -e "\n===== Pipeline Parallelism Tests ====="
+mpirun -n $NUM_PROCESSES python tests/test_pipeline_parallel.py
+
 echo -e "\n===== All tests completed! =====" 
