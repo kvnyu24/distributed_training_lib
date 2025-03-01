@@ -30,4 +30,16 @@ mpirun -n $NUM_PROCESSES python tests/test_performance_utils.py
 echo -e "\n===== Pipeline Parallelism Tests ====="
 mpirun -n $NUM_PROCESSES python tests/test_pipeline_parallel.py
 
+echo -e "\n===== ZeRO Optimizer Tests ====="
+mpirun -n $NUM_PROCESSES python tests/test_zero_optimizer.py
+
+echo -e "\n===== Tensor Parallelism Tests ====="
+mpirun -n $NUM_PROCESSES python tests/test_tensor_parallel.py
+
+echo -e "\n===== Sequence Parallelism Tests ====="
+mpirun -n $NUM_PROCESSES python tests/test_sequence_parallel.py
+
+echo -e "\n===== Activation Checkpointing Tests ====="
+mpirun -n $NUM_PROCESSES python tests/test_activation_checkpoint.py
+
 echo -e "\n===== All tests completed! =====" 

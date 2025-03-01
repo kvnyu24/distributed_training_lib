@@ -1,103 +1,99 @@
 # Distributed Training Library
 
-A Python library for distributed training that supports both naive and Megatron-style model parallelism, as well as data parallelism.
+A Python library for distributed deep learning training using MPI, supporting various parallelism strategies and optimization techniques.
 
 ## Features
 
-- Model Parallelism
-  - Naive model parallelism implementation
-  - Megatron-style model parallelism implementation
-- Data Parallelism support
-- Distributed gradient averaging and collection
-- Checkpoint management for saving and loading distributed models
-- Performance monitoring with communication/computation tracking
-- MPI-based communication
-- Efficient parallel forward and backward operations
+- **Model Parallelism**: Split models across multiple devices
+  - Naive partitioning (layer-wise)
+  - Megatron-style parallelism (attention/MLP blocks)
+  - Tensor Parallelism (intra-layer parallelism)
+- **Data Parallelism**: Train on different data batches across multiple devices
+- **Pipeline Parallelism**: Split models into pipeline stages
+- **Memory Optimization**:
+  - ZeRO (Zero Redundancy Optimizer) - Memory-efficient data parallelism
+  - Activation Checkpointing - Trade computation for memory
+- **Utilities**:
+  - Distributed gradient averaging and collection
+  - Checkpoint management for saving and loading distributed models
+  - Performance monitoring with communication/computation tracking
 
 ## Installation
 
 ```bash
-pip install .
+# Clone the repository
+git clone https://github.com/yourusername/distributed_training_lib.git
+cd distributed_training_lib
+
+# Install dependencies
+pip install -r requirements.txt
+
+# Install the library
+pip install -e .
 ```
 
 ## Requirements
 
-- Python >= 3.8
-- numpy >= 1.26.4
-- mpi4py >= 3.1.5
-- h5py >= 3.10.0
+- Python 3.6+
+- NumPy
+- mpi4py
+- (Optional) PyTorch or TensorFlow for integration with these frameworks
 
 ## Usage
 
 ### Basic Configuration and Training
 
 ```python
-from distributed_training_lib import ParallelTrainer
-from distributed_training_lib.parallel import ModelParallelConfig
+from distributed_training_lib import ParallelTrainer, ModelParallelConfig
 
-# Initialize MPI
+# Configure parallelism
 config = ModelParallelConfig(
-    mp_size=4,  # Model parallel size
-    dp_size=2,  # Data parallel size
-    is_megatron=True,  # Use Megatron-style parallelism
-    in_dim=256,  # Input dimension
-    out_dim=512  # Output dimension
+    model_parallel_size=2,  # Split model across 2 devices
+    data_parallel_size=2,   # Use 2 data parallel groups
+    pipeline_parallel_size=1  # No pipeline parallelism
 )
 
+# Create a trainer
 trainer = ParallelTrainer(config)
 
-# Forward and backward passes
-output = trainer.forward(input_data)
-grad = trainer.backward(output_grad)
+# Set up model (could be a PyTorch or TensorFlow model, or custom implementation)
+model = MyModel()
+
+# Train with parallel strategy
+trainer.train(model, dataset, epochs=10)
 ```
 
 ### Gradient Management
 
 ```python
 from distributed_training_lib import GradientManager
+from mpi4py import MPI
 
-# Average gradients across data parallel processes
-averaged_gradients = GradientManager.average_gradients(local_gradients, trainer.dp_comm)
+# Create a gradient manager
+gradient_mgr = GradientManager(MPI.COMM_WORLD)
 
-# Collect gradients from all processes
-all_gradients = GradientManager.collect_gradients(local_gradients, trainer.dp_comm)
-
-# Reduce multiple gradients with or without averaging
-gradients_dict = {
-    "layer1": layer1_gradients,
-    "layer2": layer2_gradients
-}
-reduced_gradients = GradientManager.reduce_gradients(gradients_dict, trainer.dp_comm, average=True)
+# During training
+local_grads = compute_gradients(model, batch)
+averaged_grads = gradient_mgr.average_gradients(local_grads)
+apply_gradients(model, averaged_grads)
 ```
 
 ### Checkpoint Management
 
 ```python
 from distributed_training_lib import CheckpointManager
-import numpy as np
 from mpi4py import MPI
 
-comm = MPI.COMM_WORLD
-rank = comm.Get_rank()
+# Create a checkpoint manager
+checkpoint_mgr = CheckpointManager(MPI.COMM_WORLD, "/path/to/checkpoints")
 
-# Create checkpoint manager
-checkpoint_manager = CheckpointManager(
-    checkpoint_dir="checkpoints",
-    comm=comm,
-    rank=rank
-)
+# Save a checkpoint
+model_state = extract_model_state(model)
+checkpoint_mgr.save_checkpoint(model_state, step=1000)
 
-# Save model state
-state_dict = {
-    "weights": np.array(...),
-    "bias": np.array(...),
-    "learning_rate": 0.01
-}
-checkpoint_manager.save_checkpoint(state_dict, step=1000)
-
-# Load model state
-loaded_state = checkpoint_manager.load_checkpoint()  # Latest checkpoint
-loaded_state = checkpoint_manager.load_checkpoint(step=500)  # Specific checkpoint
+# Load a checkpoint
+loaded_state = checkpoint_mgr.load_checkpoint(step=1000)
+restore_model_state(model, loaded_state)
 ```
 
 ### Performance Monitoring
@@ -106,66 +102,140 @@ loaded_state = checkpoint_manager.load_checkpoint(step=500)  # Specific checkpoi
 from distributed_training_lib import PerformanceMonitor
 from mpi4py import MPI
 
-comm = MPI.COMM_WORLD
-rank = comm.Get_rank()
+# Create a performance monitor
+perf_monitor = PerformanceMonitor(MPI.COMM_WORLD)
 
-# Create performance monitor
-monitor = PerformanceMonitor(
-    comm=comm,
-    rank=rank,
-    log_dir="logs"
-)
+# During training
+perf_monitor.start_timer("forward_pass")
+outputs = model.forward(inputs)
+perf_monitor.stop_timer("forward_pass")
 
-# Training loop
-for step in range(num_steps):
-    monitor.step()
-    
-    # Time computation
-    monitor.start_timer("compute")
-    # ... computation code ...
-    monitor.stop_timer("compute")
-    
-    # Time communication
-    monitor.start_timer("comm")
-    # ... communication code ...
-    monitor.stop_timer("comm")
-    
-    # Add custom metrics
-    monitor.add_metric("loss", loss_value)
-    monitor.increment_counter("num_samples", batch_size)
-    
-    # Periodically log metrics
-    if step % 100 == 0:
-        monitor.log_metrics(step)
+perf_monitor.start_timer("backward_pass")
+gradients = compute_gradients(outputs, labels)
+perf_monitor.stop_timer("backward_pass")
+
+# Get performance metrics
+metrics = perf_monitor.get_performance_metrics()
+print(f"Forward pass time: {metrics['forward_pass']} seconds")
 ```
 
-## Documentation
+### Memory Optimization with ZeRO
 
-The library is organized into several modules:
+```python
+from distributed_training_lib import ZeROOptimizer, ZeROStage
+from mpi4py import MPI
 
-- `core/`: Core functionality and base classes
-- `parallel/`: Implementation of different parallelism strategies
-- `utils/`: Utility functions and helpers
-  - `gradient_utils.py`: Utilities for gradient operations
-  - `checkpoint_utils.py`: Checkpoint saving and loading
-  - `performance_utils.py`: Performance monitoring
+# Create a ZeRO optimizer (Stage 1, 2, or 3)
+optimizer = ZeROOptimizer(
+    dp_comm=MPI.COMM_WORLD,
+    stage=ZeROStage.STAGE_2,  # Partition optimizer states and gradients
+    learning_rate=0.001
+)
 
-For detailed API documentation, please refer to the docstrings in each module.
+# Register model parameters
+optimizer.register_parameters(model_params)
+
+# Training loop
+for epoch in range(epochs):
+    # Forward pass
+    outputs = model.forward(inputs)
+    loss = compute_loss(outputs, labels)
+    
+    # Compute gradients
+    gradients = compute_gradients(loss, model_params)
+    
+    # Reduce and partition gradients according to ZeRO stage
+    reduced_grads = optimizer.reduce_gradients(gradients)
+    
+    # Update parameters
+    updated_params = optimizer.step(model_params, reduced_grads)
+    
+    # Update model with new parameters
+    update_model(model, updated_params)
+```
+
+### Tensor Parallelism
+
+```python
+from distributed_training_lib import TensorParallelism
+from mpi4py import MPI
+
+# Create tensor parallelism handler
+tp = TensorParallelism(MPI.COMM_WORLD)
+
+# Split a linear layer across devices
+weights = create_large_weight_matrix(1024, 4096)
+biases = create_bias_vector(4096)
+
+# Split weights and biases column-wise
+local_weights, local_biases = tp.split_linear_layer(weights, biases, split_type="column")
+
+# Forward pass with column-parallel linear layer
+output = tp.parallel_linear_forward(input_tensor, local_weights, local_biases, split_type="column")
+
+# Backward pass
+grad_input, grad_weights, grad_biases = tp.parallel_linear_backward(
+    input_tensor, grad_output, local_weights, split_type="column"
+)
+```
+
+### Activation Checkpointing
+
+```python
+from distributed_training_lib import ActivationCheckpoint
+
+# Create activation checkpointing manager
+act_checkpoint = ActivationCheckpoint(checkpoint_segments=2)
+
+# Register layer functions
+act_checkpoint.register_function("layer1", layer1_forward, layer1_backward)
+act_checkpoint.register_function("layer2", layer2_forward, layer2_backward)
+
+# Forward pass with checkpointing
+activations = [input_data]
+for i in range(num_layers):
+    layer_inputs = [activations[-1], weights[i], biases[i]]
+    layer_output = act_checkpoint.checkpoint_activations(
+        f"layer_{i}", i, num_layers, layer_inputs
+    )
+    activations.append(layer_output)
+
+# Backward pass with recomputation
+grad_output = compute_loss_gradient(activations[-1], targets)
+for i in range(num_layers-1, -1, -1):
+    layer_inputs = [activations[i], weights[i], biases[i]]
+    grad_inputs = act_checkpoint.backward_pass(
+        f"layer_{i}", i, num_layers, grad_output
+    )
+    grad_output = grad_inputs[0]
+```
 
 ## Tests
 
 Run the tests using MPI:
 
 ```bash
+# Run all tests
+./run_tests.sh
+
+# Run specific tests
 mpirun -n 2 python tests/test_config.py
 mpirun -n 2 python tests/test_naive_parallel.py
 mpirun -n 2 python tests/test_megatron_parallel.py
 mpirun -n 2 python tests/test_data_parallel.py
+mpirun -n 2 python tests/test_pipeline_parallel.py
 mpirun -n 2 python tests/test_gradient_utils.py
 mpirun -n 2 python tests/test_checkpoint_utils.py
 mpirun -n 2 python tests/test_performance_utils.py
+mpirun -n 2 python tests/test_zero_optimizer.py
+mpirun -n 2 python tests/test_tensor_parallel.py
+mpirun -n 2 python tests/test_activation_checkpoint.py
 ```
+
+## Documentation
+
+For detailed documentation, see the `docs/` directory or the docstrings in the code.
 
 ## License
 
-MIT License
+This project is licensed under the MIT License - see the LICENSE file for details.
