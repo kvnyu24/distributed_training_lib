@@ -20,6 +20,11 @@ from .utils.activation_checkpoint import ActivationCheckpoint, CheckpointFunctio
 
 from .optimizers.zero_optimizer import ZeROOptimizer, ZeROStage
 
+from .config import ParallelConfig
+
+from .parallel.expert_parallel import ExpertParallelism
+from .parallel.moe_model import MixtureOfExperts
+
 __version__ = "0.2.0"
 __all__ = [
     "ModelParallelConfig", 
@@ -38,5 +43,8 @@ __all__ = [
     "ActivationCheckpoint",
     "CheckpointFunction",
     "ZeROOptimizer",
-    "ZeROStage"
+    "ZeROStage",
+    "ParallelConfig",
+    "ExpertParallelism",
+    "MixtureOfExperts"
 ]
